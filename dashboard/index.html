@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Teddy Afro — ETORIKA Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="color-scheme" content="dark">
+<meta name="darkreader-lock">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #2ea043;
+    --accent-2: #58a6ff;
+    --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--fg);
+    max-width: 1200px; margin: 0 auto;
+  }
+  header { margin-bottom: 24px; }
+  h1 { margin: 0 0 4px 0; font-size: 26px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .meta .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); margin-right: 6px;
+    box-shadow: 0 0 0 0 var(--accent);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 var(--accent); }
+    70%  { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px;
+  }
+  .kpi .label {
+    color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .kpi .value {
+    font-size: 26px; font-weight: 600; margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi .delta {
+    font-size: 12px; color: var(--accent); margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi .delta.muted { color: var(--muted); }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px; margin-bottom: 20px;
+  }
+  .panel h2 { margin: 0 0 4px 0; font-size: 16px; font-weight: 600; }
+  .panel .desc { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.title { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  .footer { color: var(--muted); font-size: 12px; text-align: center; padding: 20px 0; }
+  figure { margin: 0; background: transparent; color: var(--fg); }
+  /* Plot's tip uses var(--plot-background) for its bubble fill.
+     Force it dark regardless of OS color scheme. */
+  figure, figure svg, .panel svg {
+    --plot-background: #21262d;
+  }
+  /* Plot tooltip: dark box, light text (covers all Plot 0.6.x structures) */
+  g[aria-label="tip"] path,
+  g[aria-label="tip"] rect,
+  g[aria-label="tip"] > path:first-child {
+    fill: #21262d !important;
+    stroke: #58a6ff !important;
+    stroke-opacity: 0.6 !important;
+  }
+  g[aria-label="tip"] text,
+  g[aria-label="tip"] tspan {
+    fill: #e6edf3 !important;
+    font-weight: 400 !important;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Teddy Afro — ETORIKA</h1>
+    <div class="meta" id="meta"><span class="dot"></span>Loading…</div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="panel">
+    <h2>Track standings</h2>
+    <div class="desc">Current views per track, ranked. Hover for details.</div>
+    <div id="chart-ranking"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Views per track</h2>
+    <div class="desc">Each line is one track, colored by track number (track 01 → 18).
+      Track number is shown at the line's right edge.</div>
+    <div id="chart-views"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Album momentum</h2>
+    <div class="desc">Total album views accumulated since release.</div>
+    <div id="chart-total"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Channel subscribers</h2>
+    <div class="desc">Album buzz translates to channel growth.</div>
+    <div id="chart-subs"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Latest snapshot</h2>
+    <table id="latest-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Title</th>
+          <th class="num">Views</th>
+          <th class="num">Likes</th>
+          <th class="num">Comments</th>
+          <th class="num">Like %</th>
+          <th class="num">Δ Views (last)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="footer" id="footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
+<script>
+const fmt    = new Intl.NumberFormat();
+const fmtPct = (x) => (x * 100).toFixed(2) + "%";
+const RELEASE = new Date("2026-04-16T11:00:00Z");
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function trackNumber(title) {
+  const m = (title || "").match(/Track\s+(\d+)/i);
+  return m ? parseInt(m[1], 10) : 999;
+}
+
+function shortTitle(t) {
+  if (!t) return "";
+  return t.replace(/^TEDDY AFRO\s*-\s*/i, "")
+          .replace(/\s*\(Official.*\)$/i, "")
+          .replace(/\s*\|\s*Track\s+\d+\s*$/i, "")
+          .trim();
+}
+
+function trackLabel(v) {
+  const n = trackNumber(v.title);
+  return n < 999 ? `${String(n).padStart(2, "0")} · ${shortTitle(v.title)}`
+                 : shortTitle(v.title);
+}
+
+function relativeTime(date) {
+  const sec = (Date.now() - date.getTime()) / 1000;
+  if (sec < 60)    return `${Math.round(sec)}s ago`;
+  if (sec < 3600)  return `${Math.round(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.round(sec / 3600)}h ago`;
+  return `${Math.round(sec / 86400)}d ago`;
+}
+
+function paletteFor(videos) {
+  const sorted = [...videos].sort(
+    (a, b) => trackNumber(a.title) - trackNumber(b.title));
+  const map = new Map();
+  sorted.forEach((v, i) => {
+    const t = sorted.length === 1 ? 0.5
+            : (0.08 + 0.84 * i / (sorted.length - 1));
+    map.set(v.video_id, d3.interpolateTurbo(t));
+  });
+  return map;
+}
+
+function getLatestPerVideo(snapshots, offset = 0) {
+  const byVideo = d3.group(snapshots, d => d.video_id);
+  const out = [];
+  for (const [vid, rows] of byVideo) {
+    rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    if (rows[offset]) out.push(rows[offset]);
+  }
+  return out;
+}
+
+function totalsTimeline(snapshots) {
+  // Per-video forward-fill running sum: at each snapshot event, the total
+  // is the sum of every video's most recent known value. A naive sum-by-
+  // timestamp would spike/dip because each timestamp usually carries only
+  // one video's data (tracks are polled a moment apart).
+  const sorted = [...snapshots].sort(
+    (a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const latest = new Map();
+  let views = 0, likes = 0, comments = 0;
+  const out = [];
+  for (const s of sorted) {
+    const prev = latest.get(s.video_id);
+    views    += s.view_count    - (prev?.view_count    ?? 0);
+    likes    += s.like_count    - (prev?.like_count    ?? 0);
+    comments += s.comment_count - (prev?.comment_count ?? 0);
+    latest.set(s.video_id, s);
+    out.push({
+      timestamp: new Date(s.timestamp),
+      view_count: views, like_count: likes, comment_count: comments,
+    });
+  }
+  return out;
+}
+
+// ── KPI cards ────────────────────────────────────────────────────────
+
+function renderKpis(data, latest, prevLatest) {
+  const kpis = document.getElementById("kpis");
+  const totalViews    = d3.sum(latest, d => d.view_count);
+  const totalLikes    = d3.sum(latest, d => d.like_count);
+  const totalComments = d3.sum(latest, d => d.comment_count);
+  const prevViews     = d3.sum(prevLatest, d => d.view_count);
+  const deltaViews    = totalViews - prevViews;
+  const avgLikePct    = totalViews ? totalLikes / totalViews : 0;
+
+  const hours = (Date.now() - RELEASE.getTime()) / 3600000;
+  const hoursStr = hours < 24
+    ? `${hours.toFixed(1)}h since release`
+    : `${(hours / 24).toFixed(1)} days since release`;
+
+  let subsKpi = null;
+  const cs = data.channel_snapshots;
+  if (cs.length) {
+    const first = cs[0].subscriber_count;
+    const last  = cs[cs.length - 1].subscriber_count;
+    const d = last - first;
+    subsKpi = {
+      label: "Channel subs",
+      value: fmt.format(last),
+      delta: d > 0 ? `+${fmt.format(d)} since first snapshot`
+                   : (d < 0 ? `${fmt.format(d)} since first snapshot` : null),
+    };
+  }
+
+  const items = [
+    { label: "Total album views",
+      value: fmt.format(totalViews),
+      delta: deltaViews > 0
+        ? `+${fmt.format(deltaViews)} since prev snapshot`
+        : "no change since prev snapshot",
+      deltaClass: deltaViews > 0 ? "" : "muted" },
+    { label: "Total likes",    value: fmt.format(totalLikes) },
+    { label: "Total comments", value: fmt.format(totalComments) },
+    { label: "Avg like rate",
+      value: fmtPct(avgLikePct),
+      delta: "weighted by views",
+      deltaClass: "muted" },
+    { label: "Tracks tracked",
+      value: data.videos.length,
+      delta: hoursStr,
+      deltaClass: "muted" },
+  ];
+  if (subsKpi) items.push(subsKpi);
+
+  kpis.innerHTML = items.map(it => `
+    <div class="kpi">
+      <div class="label">${it.label}</div>
+      <div class="value">${it.value}</div>
+      ${it.delta ? `<div class="delta ${it.deltaClass || ""}">${it.delta}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+// ── Charts ───────────────────────────────────────────────────────────
+
+function chartContainer(id) {
+  const el = document.getElementById(id);
+  el.innerHTML = "";
+  return el;
+}
+
+function renderRanking(data, latest, colors) {
+  const titles  = new Map(data.videos.map(v => [v.video_id, trackLabel(v)]));
+  const numbers = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
+  const rows = latest.map(s => ({
+    video_id: s.video_id,
+    title:    titles.get(s.video_id) || s.video_id,
+    track:    numbers.get(s.video_id),
+    views:    s.view_count,
+    likes:    s.like_count,
+    comments: s.comment_count,
+    like_rate: s.view_count > 0 ? s.like_count / s.view_count : 0,
+  }));
+  const order = rows.slice().sort((a, b) => b.views - a.views).map(d => d.title);
+
+  // Measure the longest label so the left margin fits without clipping
+  const ctx = document.createElement("canvas").getContext("2d");
+  ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  const maxLabelWidth = Math.max(
+    ...rows.map(d => ctx.measureText(d.title).width)
+  );
+  const leftMargin = Math.min(420, Math.ceil(maxLabelWidth) + 24);
+
+  const el = chartContainer("chart-ranking");
+  const chart = Plot.plot({
+    width:  el.clientWidth,
+    height: Math.max(220, rows.length * 26 + 60),
+    style:  { background: "transparent", color: "#e6edf3", fontSize: "12px" },
+    marginLeft:  leftMargin,
+    marginRight: 90,
+    x: { label: "Views", grid: true, tickFormat: "~s", nice: true },
+    y: { label: null, domain: order },
+    color: {
+      domain: rows.map(d => d.title),
+      range:  rows.map(d => colors.get(d.video_id)),
+    },
+    marks: [
+      Plot.barX(rows, {
+        x: "views", y: "title", fill: "title",
+        tip: { fill: "#21262d", stroke: "#58a6ff", strokeOpacity: 0.6,
+               format: { y: null, fill: null, x: (v) => fmt.format(v) } },
+        channels: {
+          Track:    "title",
+          Views:    d => fmt.format(d.views),
+          Likes:    d => fmt.format(d.likes),
+          Comments: d => fmt.format(d.comments),
+          "Like rate": d => fmtPct(d.like_rate),
+        },
+      }),
+      Plot.text(rows, {
+        x: "views", y: "title",
+        text: d => " " + fmt.format(d.views),
+        textAnchor: "start", dx: 4, fill: "#e6edf3",
+      }),
+      Plot.ruleX([0]),
+    ],
+  });
+  el.appendChild(chart);
+}
+
+function renderTotalChart(data) {
+  const series = totalsTimeline(data.snapshots);
+  if (series.length < 2) {
+    chartContainer("chart-total").innerHTML =
+      '<div style="color: var(--muted); padding: 40px; text-align: center;">' +
+      'Need more snapshots to show momentum.</div>';
+    return;
+  }
+  const el = chartContainer("chart-total");
+  const chart = Plot.plot({
+    width: el.clientWidth, height: 260,
+    style: { background: "transparent", color: "#e6edf3", fontSize: "12px",
+             "--plot-background": "#21262d" },
+    marginLeft: 80,
+    x: { type: "time", label: null, grid: true },
+    y: { label: "Total views", grid: true, tickFormat: "~s", nice: true },
+    marks: [
+      Plot.areaY(series, {
+        x: "timestamp", y: "view_count",
+        fill: "#2ea043", fillOpacity: 0.18,
+        curve: "monotone-x",
+      }),
+      Plot.lineY(series, {
+        x: "timestamp", y: "view_count",
+        stroke: "#2ea043", strokeWidth: 2,
+        curve: "monotone-x",
+        tip: {
+          fill: "#21262d", stroke: "#58a6ff", strokeOpacity: 0.6,
+          format: {
+            x: (d) => d3.timeFormat("%b %-d, %-I:%M %p")(d),
+            y: (v) => fmt.format(v),
+          },
+        },
+        channels: {
+          Likes:    d => fmt.format(d.like_count),
+          Comments: d => fmt.format(d.comment_count),
+        },
+      }),
+      Plot.ruleX([RELEASE], { stroke: "#d29922", strokeDasharray: "4,4" }),
+      Plot.text([{ x: RELEASE, y: 0, label: "Release" }], {
+        x: "x", y: "y", text: "label",
+        textAnchor: "start", dx: 6, dy: -6, fill: "#d29922",
+      }),
+    ],
+  });
+  el.appendChild(chart);
+}
+
+function renderViewsChart(data, colors) {
+  const titles  = new Map(data.videos.map(v => [v.video_id, trackLabel(v)]));
+  const numbers = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
+  const series = data.snapshots.map(s => ({
+    ...s,
+    timestamp: new Date(s.timestamp),
+    title: titles.get(s.video_id) || s.video_id,
+    track: numbers.get(s.video_id),
+  }));
+
+  // For end-labels: the latest point per track
+  const latestPerTrack = getLatestPerVideo(data.snapshots, 0).map(s => ({
+    ...s,
+    timestamp: new Date(s.timestamp),
+    title: titles.get(s.video_id) || s.video_id,
+    track: numbers.get(s.video_id),
+  }));
+
+  const el = chartContainer("chart-views");
+  const chart = Plot.plot({
+    width: el.clientWidth, height: 360,
+    style: { background: "transparent", color: "#e6edf3", fontSize: "12px",
+             "--plot-background": "#21262d" },
+    marginLeft: 80, marginRight: 36,
+    x: { type: "time", label: null, grid: true },
+    y: { label: "Views", grid: true, tickFormat: "~s" },
+    color: {
+      type: "linear",
+      domain: [1, data.videos.length],
+      range: ["#3b00f1", "#ff0000"],  // not used; Turbo via fill below
+    },
+    marks: [
+      Plot.lineY(series, {
+        x: "timestamp", y: "view_count",
+        stroke: d => colors.get(d.video_id),
+        strokeWidth: 1.6,
+        tip: { fill: "#21262d", stroke: "#58a6ff", strokeOpacity: 0.6 },
+        channels: { Track: "title" },
+      }),
+      Plot.text(latestPerTrack, {
+        x: "timestamp", y: "view_count",
+        text: d => d.track < 999 ? String(d.track).padStart(2, "0") : "·",
+        fill: d => colors.get(d.video_id),
+        textAnchor: "start", dx: 5,
+        fontSize: 10, fontWeight: 600,
+      }),
+      Plot.ruleX([RELEASE], { stroke: "#d29922", strokeDasharray: "4,4" }),
+    ],
+  });
+  el.appendChild(chart);
+}
+
+function renderSubsChart(data) {
+  const cs = data.channel_snapshots;
+  const el = chartContainer("chart-subs");
+  if (cs.length < 2) {
+    el.innerHTML =
+      '<div style="color: var(--muted); padding: 40px; text-align: center;">' +
+      'Waiting for more channel snapshots…</div>';
+    return;
+  }
+  const series = cs.map(s => ({
+    timestamp: new Date(s.timestamp),
+    subscribers: s.subscriber_count,
+    delta: s.subscriber_count - cs[0].subscriber_count,
+  }));
+  const chart = Plot.plot({
+    width: el.clientWidth, height: 240,
+    style: { background: "transparent", color: "#e6edf3", fontSize: "12px",
+             "--plot-background": "#21262d" },
+    marginLeft: 80,
+    x: { type: "time", label: null, grid: true },
+    y: { label: "Subscribers", grid: true, tickFormat: "~s", nice: true },
+    marks: [
+      Plot.areaY(series, {
+        x: "timestamp", y: "subscribers",
+        fill: "#58a6ff", fillOpacity: 0.15,
+      }),
+      Plot.lineY(series, {
+        x: "timestamp", y: "subscribers",
+        stroke: "#58a6ff", strokeWidth: 2,
+        tip: { fill: "#21262d", stroke: "#58a6ff", strokeOpacity: 0.6 },
+        channels: { "Δ since start": d => "+" + fmt.format(d.delta) },
+      }),
+      Plot.ruleX([RELEASE], { stroke: "#d29922", strokeDasharray: "4,4" }),
+    ],
+  });
+  el.appendChild(chart);
+}
+
+// ── Table ────────────────────────────────────────────────────────────
+
+function renderTable(data, latest, prevLatest) {
+  const prevByVideo = new Map(prevLatest.map(d => [d.video_id, d.view_count]));
+  const titles  = new Map(data.videos.map(v => [v.video_id, shortTitle(v.title)]));
+  const numbers = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
+  const sorted  = [...latest].sort((a, b) => b.view_count - a.view_count);
+
+  const tbody = document.querySelector("#latest-table tbody");
+  tbody.innerHTML = sorted.map(r => {
+    const prev  = prevByVideo.get(r.video_id);
+    const delta = prev !== undefined ? r.view_count - prev : null;
+    const deltaStr = delta === null ? "—" :
+      (delta >= 0 ? `+${fmt.format(delta)}` : fmt.format(delta));
+    const likePct = r.view_count > 0
+      ? (r.like_count / r.view_count * 100).toFixed(2) + "%" : "—";
+    const num = numbers.get(r.video_id);
+    return `
+      <tr>
+        <td>${num < 999 ? num : "—"}</td>
+        <td class="title">${titles.get(r.video_id) || r.video_id}</td>
+        <td class="num">${fmt.format(r.view_count)}</td>
+        <td class="num">${fmt.format(r.like_count)}</td>
+        <td class="num">${fmt.format(r.comment_count)}</td>
+        <td class="num">${likePct}</td>
+        <td class="num">${deltaStr}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+// ── Main loop ────────────────────────────────────────────────────────
+
+const REFRESH_MS = 30000;
+
+async function loadAndRender() {
+  const res = await fetch(`data.json?t=${Date.now()}`, { cache: "no-store" });
+  const data = await res.json();
+
+  const channelTitle = data.videos[0]?.channel_title || "Channel";
+  document.getElementById("title").textContent = `${channelTitle} — ETORIKA`;
+
+  const lastSnap = data.snapshots.length
+    ? new Date(data.snapshots[data.snapshots.length - 1].timestamp)
+    : null;
+
+  const meta = document.getElementById("meta");
+  meta.innerHTML = `<span class="dot"></span>` +
+    `${data.videos.length} tracks · ${fmt.format(data.snapshots.length)} snapshots · ` +
+    `last data ${lastSnap ? relativeTime(lastSnap) : "—"} · ` +
+    `auto-refresh every 30s`;
+
+  const latest     = getLatestPerVideo(data.snapshots, 0);
+  const prevLatest = getLatestPerVideo(data.snapshots, 1);
+  const colors     = paletteFor(data.videos);
+
+  renderKpis(data, latest, prevLatest);
+  renderRanking(data, latest, colors);
+  renderTotalChart(data);
+  renderViewsChart(data, colors);
+  renderSubsChart(data);
+  renderTable(data, latest, prevLatest);
+
+  document.getElementById("footer").textContent =
+    `Released ${RELEASE.toUTCString()} · ${fmt.format(data.snapshots.length)} ` +
+    `snapshots collected since launch.`;
+}
+
+loadAndRender().catch(e => {
+  document.getElementById("meta").textContent = "Error loading data: " + e.message;
+});
+setInterval(() => loadAndRender().catch(console.error), REFRESH_MS);
+window.addEventListener("resize", () => loadAndRender().catch(console.error));
+</script>
+</body>
+</html>
