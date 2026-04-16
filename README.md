@@ -1,4 +1,4 @@
-# Etorika Album (ኤቶሪካ አልበም)
+# Etorika Album (ኢቶሪካ አልበም)
 
 <p align="center">
   <img src="assets/etorika-album-cover.jpg" alt="ETORIKA album cover" width="480">
