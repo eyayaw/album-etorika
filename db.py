@@ -171,7 +171,7 @@ def export_to_json(path):
         "snapshots": snapshots,
         "channel_snapshots": channel_snapshots,
     }
-    Path(path).write_text(json.dumps(data))
+    Path(path).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 # ── Incremental JSONL export ────────────────────────────────────────
@@ -205,9 +205,9 @@ def _append_partitioned(out_dir, rows):
 
     for date, items in by_date.items():
         path = Path(out_dir) / f"{date}.jsonl"
-        with open(path, "a") as f:
+        with open(path, "a", encoding="utf-8") as f:
             for item in items:
-                f.write(json.dumps(item) + "\n")
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
     return sum(len(v) for v in by_date.values())
 
 
@@ -238,9 +238,9 @@ def export_jsonl_incremental(out_dir):
     videos = [dict(r) for r in conn.execute(
         "SELECT * FROM videos ORDER BY published_at"
     ).fetchall()]
-    with open(out / "videos.jsonl", "w") as f:
+    with open(out / "videos.jsonl", "w", encoding="utf-8") as f:
         for v in videos:
-            f.write(json.dumps(v) + "\n")
+            f.write(json.dumps(v, ensure_ascii=False) + "\n")
 
     new_snaps = [dict(r) for r in conn.execute(
         """SELECT video_id, timestamp, view_count, like_count, comment_count
