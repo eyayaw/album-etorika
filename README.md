@@ -1,5 +1,7 @@
 # Etorika Album (ኤቶሪካ አልበም)
 
+A small project to monitor the album's traction in real time.
+
 <p align="center">
   <img src="assets/etorika-album-cover.jpg" alt="ETORIKA album cover" width="480">
 </p>
@@ -26,9 +28,8 @@ Auto-refreshed every 30 seconds, showing:
 - **Latest snapshot** — precise current numbers, each row clickable to the
   track on YouTube
 
-The page is mobile-aware, dark-mode only (with `color-scheme: dark` so Dark
-Reader leaves it alone), and completely static — it just fetches
-`data.json` from the tracker.
+Dark mode, mobile-aware, static HTML + `data.json` — no backend at request
+time.
 
 ## Under the hood
 
@@ -43,13 +44,48 @@ Reader leaves it alone), and completely static — it just fetches
 
 ## Try it locally
 
+### Prerequisites
+
+- Python ≥ 3.11
+- [`uv`](https://docs.astral.sh/uv/) for dependency management
+- A YouTube Data API key — create one at
+  [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+  and enable *YouTube Data API v3*
+
+### Run
+
 ```bash
 uv sync                                    # install deps
-echo "YOUTUBE_API_KEY=your-key" > .env     # get one from the link below
+echo "YOUTUBE_API_KEY=your-key" > .env
 uv run python main.py run                  # start the tracker
 uv run python main.py dashboard            # → http://localhost:8000
 ```
 
-Get a YouTube Data API key at
-[console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
-— enable "YouTube Data API v3" first.
+<details>
+<summary>Other commands</summary>
+
+| Command | What it does |
+| --- | --- |
+| `run` | Auto-discover new uploads + snapshot everything in a loop |
+| `snapshot` | Take a single snapshot of all tracked videos |
+| `add VIDEO_ID …` | Manually track specific videos |
+| `add-playlist PLAYLIST_ID` | Track all videos in a playlist |
+| `stats` | Print the latest snapshot as a table |
+| `history VIDEO_ID` | Show snapshot deltas for one track |
+| `dashboard` | Serve the web dashboard (default port 8000) |
+
+Useful flags: `-i 60` to poll every 60s, `-p 8080` for a different
+dashboard port.
+
+</details>
+
+## Credits
+
+*ETORIKA* © Teddy Afro. This repository is an observer / tracker — it only
+stores and visualises publicly-reported YouTube statistics. No audio, video,
+lyrics, or artwork (besides the album cover used under fair-use linking) is
+redistributed here.
+
+## License
+
+MIT.

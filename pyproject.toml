@@ -1,10 +1,18 @@
 [project]
 name = "album-etorika"
 version = "0.1.0"
-description = "Etorika album YouTube stats"
+description = "Real-time YouTube tracker + live dashboard for Teddy Afro's ETORIKA album"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Eyayaw Beze" }]
+keywords = ["youtube", "dashboard", "observable-plot", "ethiopian-music", "teddy-afro"]
 dependencies = [
     "google-api-python-client>=2.0",
     "rich>=13.0",
 ]
+
+[project.urls]
+Homepage = "https://etorika.datakomari.com"
+Repository = "https://github.com/eyayaw/album-etorika"
+Issues = "https://github.com/eyayaw/album-etorika/issues"
