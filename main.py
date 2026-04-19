@@ -4,10 +4,9 @@ import os
 import socketserver
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
@@ -17,7 +16,19 @@ import youtube
 DASHBOARD_DIR = Path(__file__).parent / "dashboard"
 DASHBOARD_DATA = DASHBOARD_DIR / "data.json"
 
-load_dotenv()
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+_load_env_file(Path(__file__).parent / ".env")
 console = Console()
 
 DEFAULT_CHANNEL = "UCydlocDyvRtFmMffKytKqgQ"  # Teddy Afro Official
@@ -152,7 +163,7 @@ def cmd_run(args):
     console.print(f"[bold]Channel:[/bold] {channel}")
     console.print(f"[bold]Since:[/bold]   {since.isoformat()}")
     console.print(f"[bold]Poll:[/bold]    every {interval}s")
-    console.print(f"[bold]Ctrl+C to stop[/bold]\n")
+    console.print("[bold]Ctrl+C to stop[/bold]\n")
 
     client = get_client()
 

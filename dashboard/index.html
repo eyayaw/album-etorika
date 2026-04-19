@@ -96,6 +96,76 @@
     fill: #e6edf3 !important;
     font-weight: 400 !important;
   }
+  /* Keep plot SVGs from overflowing their container on narrow screens */
+  figure svg { max-width: 100%; height: auto; }
+
+  /* Total views readout overlaid on the ranking chart's empty corner */
+  #chart-ranking { position: relative; }
+  .chart-overlay {
+    position: absolute;
+    bottom: 36px;
+    right: 18px;
+    text-align: right;
+    pointer-events: none;
+    user-select: none;
+  }
+  .chart-overlay .tv-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 2px;
+  }
+  .chart-overlay .tv-num {
+    font-size: 28px;
+    font-weight: 700;
+    color: #2ea043;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-shadow: 0 0 16px rgba(46, 160, 67, 0.22);
+  }
+  .chart-overlay .tv-num.pulse {
+    animation: tv-pulse 600ms ease-out;
+  }
+  @keyframes tv-pulse {
+    0%   { text-shadow: 0 0 26px rgba(46, 160, 67, 0.85); }
+    100% { text-shadow: 0 0 16px rgba(46, 160, 67, 0.22); }
+  }
+
+  /* Clickable rows → YouTube */
+  #latest-table tbody tr { cursor: pointer; }
+  #latest-table tbody tr:hover { background: rgba(88, 166, 255, 0.08); }
+  #latest-table tbody tr td.title::after {
+    content: "↗";
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 6px;
+    opacity: 0.5;
+  }
+  #latest-table tbody tr:hover td.title::after { opacity: 1; color: var(--accent-2); }
+
+  /* Mobile adjustments */
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    h1 { font-size: 20px; }
+    .kpis { gap: 8px; }
+    .kpi { padding: 12px; }
+    .kpi .value { font-size: 22px; }
+    .kpi .delta { font-size: 11px; word-break: break-word; }
+    .panel { padding: 14px; }
+    .panel h2 { font-size: 15px; }
+    .panel .desc { font-size: 11px; }
+    table { font-size: 12px; }
+    th, td { padding: 6px 8px; }
+    td.title { max-width: 180px; }
+    /* Hide lower-signal columns on narrow screens */
+    #latest-table th:nth-child(5), #latest-table td:nth-child(5),  /* Comments */
+    #latest-table th:nth-child(6), #latest-table td:nth-child(6) { /* Like % */
+      display: none;
+    }
+    .chart-overlay .tv-num { font-size: 20px; }
+    .chart-overlay { bottom: 28px; right: 10px; }
+  }
 </style>
 </head>
 <body>
@@ -142,7 +212,6 @@
           <th class="num">Likes</th>
           <th class="num">Comments</th>
           <th class="num">Like %</th>
-          <th class="num">Δ Views (last)</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -154,9 +223,10 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
 <script>
-const fmt    = new Intl.NumberFormat();
-const fmtPct = (x) => (x * 100).toFixed(2) + "%";
-const RELEASE = new Date("2026-04-16T11:00:00Z");
+const fmt       = new Intl.NumberFormat();
+const fmtPct    = (x) => (x * 100).toFixed(2) + "%";
+const fmtFullTs = (d) => d3.timeFormat("%Y-%m-%d %H:%M:%S")(d);  // local tz
+const RELEASE   = new Date("2026-04-16T11:00:00Z");
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -177,6 +247,16 @@ function trackLabel(v) {
   const n = trackNumber(v.title);
   return n < 999 ? `${String(n).padStart(2, "0")} · ${shortTitle(v.title)}`
                  : shortTitle(v.title);
+}
+
+// Compact label for narrow viewports: drops the Amharic half, keeps just
+// the transliterated English title (e.g. "01 · Das Tal (Ansaw)").
+function narrowTrackLabel(v) {
+  const n = trackNumber(v.title);
+  const s = shortTitle(v.title);
+  const parts = s.split(/\s+-\s+/);  // split on " - "
+  const eng = parts.length > 1 ? parts[parts.length - 1].trim() : s;
+  return n < 999 ? `${String(n).padStart(2, "0")} · ${eng}` : eng;
 }
 
 function relativeTime(date) {
@@ -235,13 +315,17 @@ function totalsTimeline(snapshots) {
 
 // ── KPI cards ────────────────────────────────────────────────────────
 
-function renderKpis(data, latest, prevLatest) {
+function latestTimestampOf(snaps) {
+  return snaps.length
+    ? new Date(Math.max(...snaps.map(d => new Date(d.timestamp))))
+    : null;
+}
+
+function renderKpis(data, latest, releaseTsStr) {
   const kpis = document.getElementById("kpis");
   const totalViews    = d3.sum(latest, d => d.view_count);
   const totalLikes    = d3.sum(latest, d => d.like_count);
   const totalComments = d3.sum(latest, d => d.comment_count);
-  const prevViews     = d3.sum(prevLatest, d => d.view_count);
-  const deltaViews    = totalViews - prevViews;
   const avgLikePct    = totalViews ? totalLikes / totalViews : 0;
 
   const hours = (Date.now() - RELEASE.getTime()) / 3600000;
@@ -258,18 +342,17 @@ function renderKpis(data, latest, prevLatest) {
     subsKpi = {
       label: "Channel subs",
       value: fmt.format(last),
-      delta: d > 0 ? `+${fmt.format(d)} since first snapshot`
-                   : (d < 0 ? `${fmt.format(d)} since first snapshot` : null),
+      delta: d > 0 ? `+${fmt.format(d)} since ${releaseTsStr}`
+                   : (d < 0 ? `${fmt.format(d)} since ${releaseTsStr}` : null),
+      deltaClass: "muted",
     };
   }
 
   const items = [
     { label: "Total album views",
       value: fmt.format(totalViews),
-      delta: deltaViews > 0
-        ? `+${fmt.format(deltaViews)} since prev snapshot`
-        : "no change since prev snapshot",
-      deltaClass: deltaViews > 0 ? "" : "muted" },
+      delta: `since ${releaseTsStr}`,
+      deltaClass: "muted" },
     { label: "Total likes",    value: fmt.format(totalLikes) },
     { label: "Total comments", value: fmt.format(totalComments) },
     { label: "Avg like rate",
@@ -300,9 +383,45 @@ function chartContainer(id) {
   return el;
 }
 
+function releaseMarkers(data, colors) {
+  return data.videos
+    .filter(v => v.published_at)
+    .map(v => ({
+      video_id:  v.video_id,
+      timestamp: new Date(v.published_at),
+      title:     trackLabel(v),
+      track:     trackNumber(v.title),
+      color:     colors.get(v.video_id),
+    }));
+}
+
+const fmtReleaseTime = d3.timeFormat("%-I:%M:%S %p");
+
+function releaseDotMark(releases) {
+  return Plot.dot(releases, {
+    x: "timestamp",
+    y: () => 0,
+    fill: d => d.color,
+    stroke: "#0d1117",
+    strokeWidth: 1.2,
+    r: 4,
+    tip: { fill: "#21262d", stroke: "#58a6ff", strokeOpacity: 0.6 },
+    channels: {
+      Track:    "title",
+      Released: d => fmtReleaseTime(d.timestamp),
+    },
+  });
+}
+
 function renderRanking(data, latest, colors) {
-  const titles  = new Map(data.videos.map(v => [v.video_id, trackLabel(v)]));
-  const numbers = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
+  const el = chartContainer("chart-ranking");
+  const narrow = el.clientWidth < 600;
+  const labelFn = narrow ? narrowTrackLabel : trackLabel;
+
+  const titles    = new Map(data.videos.map(v => [v.video_id, labelFn(v)]));
+  const numbers   = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
+  const published = new Map(data.videos.map(v =>
+    [v.video_id, v.published_at ? new Date(v.published_at) : null]));
   const rows = latest.map(s => ({
     video_id: s.video_id,
     title:    titles.get(s.video_id) || s.video_id,
@@ -311,24 +430,26 @@ function renderRanking(data, latest, colors) {
     likes:    s.like_count,
     comments: s.comment_count,
     like_rate: s.view_count > 0 ? s.like_count / s.view_count : 0,
+    released:  published.get(s.video_id),
   }));
   const order = rows.slice().sort((a, b) => b.views - a.views).map(d => d.title);
 
-  // Measure the longest label so the left margin fits without clipping
+  // Measure the longest label, then cap marginLeft so bars always get room
   const ctx = document.createElement("canvas").getContext("2d");
-  ctx.font = "12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-  const maxLabelWidth = Math.max(
-    ...rows.map(d => ctx.measureText(d.title).width)
-  );
-  const leftMargin = Math.min(420, Math.ceil(maxLabelWidth) + 24);
+  const fontSize = narrow ? 11 : 12;
+  ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  const maxLabelWidth = Math.max(...rows.map(d => ctx.measureText(d.title).width));
+  const maxAllowedMargin = Math.max(60, el.clientWidth * (narrow ? 0.45 : 0.5));
+  const leftMargin = Math.min(420, maxAllowedMargin, Math.ceil(maxLabelWidth) + 24);
+  const rightMargin = narrow ? 64 : 90;
 
-  const el = chartContainer("chart-ranking");
   const chart = Plot.plot({
     width:  el.clientWidth,
-    height: Math.max(220, rows.length * 26 + 60),
-    style:  { background: "transparent", color: "#e6edf3", fontSize: "12px" },
+    height: Math.max(220, rows.length * (narrow ? 22 : 26) + 60),
+    style:  { background: "transparent", color: "#e6edf3",
+              fontSize: `${fontSize}px` },
     marginLeft:  leftMargin,
-    marginRight: 90,
+    marginRight: rightMargin,
     x: { label: "Views", grid: true, tickFormat: "~s", nice: true },
     y: { label: null, domain: order },
     color: {
@@ -346,6 +467,7 @@ function renderRanking(data, latest, colors) {
           Likes:    d => fmt.format(d.likes),
           Comments: d => fmt.format(d.comments),
           "Like rate": d => fmtPct(d.like_rate),
+          Released: d => d.released ? fmtReleaseTime(d.released) : "—",
         },
       }),
       Plot.text(rows, {
@@ -357,10 +479,28 @@ function renderRanking(data, latest, colors) {
     ],
   });
   el.appendChild(chart);
+
+  // Total album views readout in the empty corner; pulses on change.
+  const totalViews = d3.sum(rows, d => d.views);
+  const overlay = document.createElement("div");
+  overlay.className = "chart-overlay";
+  overlay.innerHTML = `
+    <div class="tv-label">Total album views</div>
+    <div class="tv-num">${fmt.format(totalViews)}</div>
+  `;
+  el.appendChild(overlay);
+  const prev = Number(el.dataset.lastTotal || 0);
+  el.dataset.lastTotal = String(totalViews);
+  if (prev && prev !== totalViews) {
+    const numEl = overlay.querySelector(".tv-num");
+    void numEl.offsetWidth;       // restart animation if re-triggered
+    numEl.classList.add("pulse");
+  }
 }
 
-function renderTotalChart(data) {
+function renderTotalChart(data, colors) {
   const series = totalsTimeline(data.snapshots);
+  const releases = releaseMarkers(data, colors);
   if (series.length < 2) {
     chartContainer("chart-total").innerHTML =
       '<div style="color: var(--muted); padding: 40px; text-align: center;">' +
@@ -402,14 +542,16 @@ function renderTotalChart(data) {
         x: "x", y: "y", text: "label",
         textAnchor: "start", dx: 6, dy: -6, fill: "#d29922",
       }),
+      releaseDotMark(releases),
     ],
   });
   el.appendChild(chart);
 }
 
 function renderViewsChart(data, colors) {
-  const titles  = new Map(data.videos.map(v => [v.video_id, trackLabel(v)]));
-  const numbers = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
+  const titles   = new Map(data.videos.map(v => [v.video_id, trackLabel(v)]));
+  const numbers  = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
+  const releases = releaseMarkers(data, colors);
   const series = data.snapshots.map(s => ({
     ...s,
     timestamp: new Date(s.timestamp),
@@ -454,6 +596,7 @@ function renderViewsChart(data, colors) {
         fontSize: 10, fontWeight: 600,
       }),
       Plot.ruleX([RELEASE], { stroke: "#d29922", strokeDasharray: "4,4" }),
+      releaseDotMark(releases),
     ],
   });
   el.appendChild(chart);
@@ -499,33 +642,33 @@ function renderSubsChart(data) {
 
 // ── Table ────────────────────────────────────────────────────────────
 
-function renderTable(data, latest, prevLatest) {
-  const prevByVideo = new Map(prevLatest.map(d => [d.video_id, d.view_count]));
+function renderTable(data, latest) {
   const titles  = new Map(data.videos.map(v => [v.video_id, shortTitle(v.title)]));
   const numbers = new Map(data.videos.map(v => [v.video_id, trackNumber(v.title)]));
   const sorted  = [...latest].sort((a, b) => b.view_count - a.view_count);
 
   const tbody = document.querySelector("#latest-table tbody");
   tbody.innerHTML = sorted.map(r => {
-    const prev  = prevByVideo.get(r.video_id);
-    const delta = prev !== undefined ? r.view_count - prev : null;
-    const deltaStr = delta === null ? "—" :
-      (delta >= 0 ? `+${fmt.format(delta)}` : fmt.format(delta));
     const likePct = r.view_count > 0
       ? (r.like_count / r.view_count * 100).toFixed(2) + "%" : "—";
     const num = numbers.get(r.video_id);
+    const yt = `https://www.youtube.com/watch?v=${r.video_id}`;
     return `
-      <tr>
+      <tr data-url="${yt}" title="Open on YouTube">
         <td>${num < 999 ? num : "—"}</td>
         <td class="title">${titles.get(r.video_id) || r.video_id}</td>
         <td class="num">${fmt.format(r.view_count)}</td>
         <td class="num">${fmt.format(r.like_count)}</td>
         <td class="num">${fmt.format(r.comment_count)}</td>
         <td class="num">${likePct}</td>
-        <td class="num">${deltaStr}</td>
       </tr>
     `;
   }).join("");
+
+  tbody.onclick = (e) => {
+    const tr = e.target.closest("tr[data-url]");
+    if (tr) window.open(tr.dataset.url, "_blank", "noopener");
+  };
 }
 
 // ── Main loop ────────────────────────────────────────────────────────
@@ -549,16 +692,16 @@ async function loadAndRender() {
     `last data ${lastSnap ? relativeTime(lastSnap) : "—"} · ` +
     `auto-refresh every 30s`;
 
-  const latest     = getLatestPerVideo(data.snapshots, 0);
-  const prevLatest = getLatestPerVideo(data.snapshots, 1);
-  const colors     = paletteFor(data.videos);
+  const latest         = getLatestPerVideo(data.snapshots, 0);
+  const colors         = paletteFor(data.videos);
+  const releaseTsStr   = fmtFullTs(RELEASE);
 
-  renderKpis(data, latest, prevLatest);
+  renderKpis(data, latest, releaseTsStr);
   renderRanking(data, latest, colors);
-  renderTotalChart(data);
+  renderTotalChart(data, colors);
   renderViewsChart(data, colors);
   renderSubsChart(data);
-  renderTable(data, latest, prevLatest);
+  renderTable(data, latest);
 
   document.getElementById("footer").textContent =
     `Released ${RELEASE.toUTCString()} · ${fmt.format(data.snapshots.length)} ` +
