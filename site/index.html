@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Album tracker</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+  /* Latin subset from @fontsource 5.3.0, under the SIL OFL 1.1. */
+  @font-face { font-family: "Libre Franklin"; font-weight: 400; font-display: swap;
+    src: url(fonts/libre-franklin-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family: "Libre Franklin"; font-weight: 700; font-display: swap;
+    src: url(fonts/libre-franklin-latin-700-normal.woff2) format("woff2"); }
+  /* The script sets --accent-light and --accent-dark from album.json. */
+  :root {
+    color-scheme: light;
+    --page: #fff;
+    --ink: #121212;
+    --ink-2: #555;
+    --muted: #767676;
+    --grid: #e6e6e6;
+    --context: #c4c4c4;
+    --accent: var(--accent-light, var(--ink));
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #151515;
+      --ink: #ececec;
+      --ink-2: #b0b0b0;
+      --muted: #8c8c8c;
+      --grid: #2b2b2b;
+      --context: #4a4a4a;
+      --accent: var(--accent-dark, var(--ink));
+    }
+  }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 16px/1.5 "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 48px 20px 40px; }
+  header, main > figure, footer { max-width: 620px; margin-left: auto; margin-right: auto; }
+  main > figure.wide { max-width: none; }
+  header { padding-bottom: 20px; border-bottom: 2px solid var(--ink); }
+  h1 { margin: 0; font-size: 30px; line-height: 34px; font-weight: 700; }
+  .dateline { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+  main > figure { margin-top: 44px; margin-bottom: 0; }
+  h3 { margin: 0 0 12px; font-size: 17px; line-height: 1.35; font-weight: 700; }
+  figure.wide > h3, figure.wide > .choices { max-width: 620px; margin-left: auto; margin-right: auto; }
+  .choices { margin-top: -8px; margin-bottom: 12px; color: var(--muted); font-size: 14px; }
+  .chart svg { display: block; overflow: visible; }
+  .chart figure { margin: 0; }
+  .chart [class$="-ramp"] { margin-bottom: 10px; color: var(--muted); font: 12px "Libre Franklin", sans-serif; }
+  .chart [class$="-ramp"] text { font-weight: 400; }
+  .choices button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--context);
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .choices button[aria-pressed="true"] { color: var(--ink); font-weight: 700; text-decoration: none; }
+  /* Plot draws every track in the --context gray. The script adds .on to the highlighted track's
+     marks, and marks described as "highlight only" show for that track alone. */
+  .tracks path.on { stroke: var(--accent); stroke-width: 2px; }
+  .tracks text.on { fill: var(--ink); font-weight: 700; }
+  .tracks [aria-description="highlight only"] > :not(.on) { display: none; }
+  details { margin-top: 14px; font-size: 14px; }
+  summary { color: var(--ink-2); cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 3px 0 3px 12px; border-bottom: 1px solid var(--grid); text-align: right; }
+  th:first-child, td:first-child { padding-left: 0; text-align: left; }
+  th { color: var(--muted); font-weight: 400; }
+  td.num { width: 2ch; color: var(--muted); }
+  footer {
+    margin-top: 56px;
+    padding-top: 10px;
+    border-top: 1px solid var(--grid);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  footer p { margin: 0 0 4px; }
+  a { color: inherit; text-decoration-color: var(--context); text-underline-offset: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title"></h1>
+    <p class="dateline" id="dateline"></p>
+  </header>
+
+  <figure id="time-to-1m"><h3>Time from going live to one million views</h3><div class="chart"></div></figure>
+  <figure id="first-48h" class="tracks"><h3>Views in each track's first 48 hours</h3>
+    <div class="chart"></div></figure>
+  <figure id="rank" class="tracks wide"><h3>Rank by views at the same age</h3>
+    <p class="choices" id="rank-window"><button data-hours="48" aria-pressed="true">48 hours</button>
+      · <button data-hours="168">1 week</button> · <button data-hours="336">2 weeks</button></p>
+    <div class="chart"></div></figure>
+  <figure id="heatmap" class="wide"><h3>Views per hour in each track's first 48 hours</h3>
+    <div class="chart"></div></figure>
+  <figure id="album-views"><h3>Total views of all tracks</h3><div class="chart"></div></figure>
+  <figure id="subscribers"><h3>Channel subscribers</h3><div class="chart"></div></figure>
+  <figure id="growth" class="tracks wide"><h3>Views per track since release</h3>
+    <div class="chart"></div></figure>
+
+  <footer>
+    <p>The counts come from the YouTube Data API. A count that stalls shows up as a jump when it
+      resumes. The rank chart breaks its lines at any hour in which a track has no sample. YouTube
+      rounds subscriber counts down to three significant figures.
+      <a href="https://github.com/eyayaw/album-etorika">Code and data on GitHub</a>.</p>
+    <p>Made by Eyayaw Beze. <span id="credit"></span></p>
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.19"></script>
+<script type="module">
+const RACE_HOURS = 48;
+const MILLION = 1_000_000;
+const DAY = 86_400_000;
+
+const full = new Intl.NumberFormat("en");
+const short = (v) => (v >= 1e6 ? `${+(v / 1e6).toPrecision(3)}m` : v >= 1e3 ? `${+(v / 1e3).toPrecision(3)}k` : `${v}`);
+const duration = (hours) => {
+  const minutes = Math.round(hours * 60);
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+};
+// AP style abbreviates the months longer than five letters when they appear with a date.
+const MONTHS = ["Jan.", "Feb.", "March", "April", "May", "June", "July", "Aug.", "Sept.", "Oct.", "Nov.", "Dec."];
+const apDate = (d) => `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+const apTime = (d) => `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
+const optional = (value) => (value === "" ? null : +value);
+
+async function load(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  return response.text();
+}
+
+const [album, videos, race, hourly, daily, channel] = await Promise.all([
+  load("album.json").then(JSON.parse),
+  load("videos.csv").then((t) => d3.csvParse(t, (d) => ({
+    id: d.video_id, track: +d.track, title: d.title, published: new Date(d.published_at),
+  }))),
+  load("race.csv").then((t) => d3.csvParse(t, (d) => ({ id: d.video_id, hours: +d.hours, views: +d.views }))),
+  load("hourly.csv").then((t) => d3.csvParse(t, (d) => ({ id: d.video_id, hour: +d.hour, views: +d.views }))),
+  load("daily.csv").then((t) => d3.csvParse(t, (d) => ({
+    date: new Date(`${d.date}T00:00:00Z`), id: d.video_id,
+    views: +d.views, likes: optional(d.likes), comments: optional(d.comments),
+  }))),
+  load("channel.csv").then((t) => d3.csvParse(t, (d) => ({
+    date: new Date(d.retrieved_at), subscribers: optional(d.subscribers),
+  }))),
+]);
+
+const name = new Map(videos.map((v) => [v.id, v.title]));
+const number = new Map(videos.map((v) => [v.id, String(v.track).padStart(2, "0")]));
+const label = new Map(videos.map((v) => [v.id, `${number.get(v.id)} ${v.title}`]));
+const release = d3.min(videos, (v) => v.published);
+const byVideo = d3.group(d3.sort(daily, (d) => d.date), (d) => d.id);
+const lastDate = d3.max(daily, (d) => d.date);
+const viewsOn = (id, date) => byVideo.get(id).findLast((d) => d.date <= date)?.views ?? 0;
+
+const totals = d3.sort(
+  d3.rollups(daily, (rows) => d3.sum(rows, (d) => d.views), (d) => +d.date),
+  ([date]) => date,
+).map(([date, views]) => ({ date: new Date(date), views }));
+const weekAgo = new Date(+lastDate - 7 * DAY);
+
+const standings = d3.sort(videos.map((v) => {
+  const latest = byVideo.get(v.id).at(-1);
+  return { ...latest, gain: latest.views - viewsOn(v.id, weekAgo) };
+}), (d) => -d.views);
+
+const raceByVideo = d3.group(d3.sort(race, (d) => d.hours), (d) => d.id);
+const firstMillion = d3.sort(videos.map((v) => {
+  const hit = raceByVideo.get(v.id).find((d) => d.views >= MILLION);
+  return hit && { id: v.id, hours: hit.hours };
+}).filter(Boolean), (d) => d.hours);
+
+// An hour that lacks a sample for any track gives every track a NaN rank, and Plot breaks the
+// lines at NaN.
+const hourlyAt = d3.group(hourly, (d) => d.hour);
+const ranks = d3.range(1, d3.max(hourly, (d) => d.hour) + 1).flatMap((hour) => {
+  const rows = hourlyAt.get(hour);
+  if (rows?.length !== videos.length) return videos.map((v) => ({ id: v.id, hour, rank: NaN }));
+  return d3.sort(rows, (d) => -d.views).map((d, i) => ({ ...d, rank: i + 1 }));
+});
+const viewsAt = d3.rollup(hourly, ([d]) => d.views, (d) => d.id, (d) => d.hour);
+const perHour = hourly.filter((d) => d.hour <= RACE_HOURS).flatMap((d) => {
+  // A track has no views when it goes live.
+  const before = d.hour === 1 ? 0 : viewsAt.get(d.id).get(d.hour - 1);
+  return before === undefined ? [] : [{ ...d, views: d.views - before }];
+});
+
+const subscribed = channel.filter((d) => d.subscribers !== null);
+
+let pinned = d3.greatest(hourlyAt.get(RACE_HOURS), (d) => d.views).id;
+let hovered = null;
+let rankHours = RACE_HOURS;
+
+const root = document.documentElement.style;
+root.setProperty("--accent-light", album.accent.light);
+root.setProperty("--accent-dark", album.accent.dark);
+const lastSample = d3.max(channel, (d) => d.date);
+document.title = album.title;
+document.getElementById("title").textContent = album.title;
+document.getElementById("dateline").textContent =
+  `Released ${apDate(release)} · Updated ${apDate(lastSample)}, ${apTime(lastSample)}`;
+document.getElementById("credit").textContent = `${album.album} © ${album.artist}.`;
+
+function plot({ x, y, ...options }) {
+  return Plot.plot({
+    marginTop: 22, marginRight: 0, marginBottom: 24, marginLeft: 0,
+    style: { background: "transparent", color: "var(--muted)", fontFamily: "inherit", fontSize: "12px",
+      fontVariantNumeric: "tabular-nums" },
+    x: { label: null, tickSize: 0, tickPadding: 8, ...x },
+    y: { label: null, axis: null, ...y },
+    ...options,
+  });
+}
+
+// Return the y-axis marks as [gridlines, labels], for the caller to draw under and over the data.
+// Each label sits above its gridline at the left edge on a halo of the page color, and the top
+// label carries the unit.
+function yAxis([lo, hi], unit, count = 4) {
+  const values = d3.ticks(lo, hi, count);
+  const top = values.at(-1);
+  return [
+    [
+      Plot.ruleY(values.filter((v) => v !== 0), { stroke: "var(--grid)" }),
+      lo === 0 ? Plot.ruleY([0], { stroke: "var(--muted)" }) : null,
+    ],
+    Plot.text(values, { y: (v) => v, frameAnchor: "left", textAnchor: "start", dy: -7, fill: "var(--muted)",
+      stroke: "var(--page)", strokeWidth: 4, paintOrder: "stroke",
+      text: (v) => (v === top ? `${short(v)} ${unit}` : short(v)) }),
+  ];
+}
+
+const hourTicks = (last) => ({ ticks: d3.range(0, last + 1, 12), tickFormat: (h) => (h === last ? `${h} hours` : h) });
+const monthTicks = { ticks: "month", tickFormat: (d) => MONTHS[d.getUTCMonth()] };
+const tip = { fill: "var(--page)", stroke: "var(--context)" };
+
+// Label each row in the left margin with the track number in the muted color, then the title.
+const rowLabels = (data, marginLeft) => [
+  Plot.text(data, { y: "id", frameAnchor: "left", dx: -marginLeft, textAnchor: "start",
+    text: (d) => number.get(d.id), fill: "var(--muted)" }),
+  Plot.text(data, { y: "id", frameAnchor: "left", dx: -marginLeft + 22, textAnchor: "start",
+    text: (d) => name.get(d.id), fill: "var(--ink)" }),
+];
+
+function timeTo1M(width) {
+  const marginLeft = 200;
+  return plot({
+    width, height: firstMillion.length * 17, marginTop: 0, marginBottom: 0, marginLeft, marginRight: 64,
+    x: { axis: null, domain: [0, d3.max(firstMillion, (d) => d.hours)] },
+    y: { domain: firstMillion.map((d) => d.id), padding: 0.38 },
+    marks: [
+      Plot.barX(firstMillion, { x: "hours", y: "id",
+        fill: (d) => (d === firstMillion[0] ? "var(--accent)" : "var(--context)") }),
+      ...rowLabels(firstMillion, marginLeft),
+      Plot.text(firstMillion, { x: "hours", y: "id", dx: 6, textAnchor: "start", text: (d) => duration(d.hours),
+        fill: "var(--ink)", fontWeight: (d) => (d === firstMillion[0] ? 700 : 400) }),
+    ],
+  });
+}
+
+function first48h(width) {
+  const ends = videos.map((v) => raceByVideo.get(v.id).at(-1));
+  const max = d3.max(race, (d) => d.views);
+  const [grid, values] = yAxis([0, max], "views");
+  return plot({
+    width, height: 320, marginRight: 140,
+    x: { domain: [0, RACE_HOURS], ...hourTicks(RACE_HOURS) },
+    y: { domain: [0, max] },
+    marks: [
+      grid,
+      Plot.lineY(race, { x: "hours", y: "views", z: "id", stroke: "var(--context)", strokeWidth: 1,
+        ariaLabel: (d) => d.id }),
+      Plot.dot(ends, { x: "hours", y: "views", r: 3, fill: "var(--accent)", ariaLabel: (d) => d.id,
+        ariaDescription: "highlight only" }),
+      Plot.text(ends, { x: "hours", y: "views", dx: 8, textAnchor: "start", text: (d) => name.get(d.id),
+        fill: "var(--ink)", ariaLabel: (d) => d.id, ariaDescription: "highlight only" }),
+      values,
+      Plot.tip(race, Plot.pointer({ x: "hours", y: "views", ...tip,
+        title: (d) => `${label.get(d.id)}\n${full.format(d.views)} views after ${duration(d.hours)}` })),
+    ],
+  });
+}
+
+function rank(width) {
+  const shown = ranks.filter((d) => d.hour <= rankHours);
+  const ends = shown.filter((d) => d.hour === rankHours && d.rank);
+  const unit = rankHours > RACE_HOURS ? 24 : 1;
+  const x = (d) => d.hour / unit;
+  const last = rankHours / unit;
+  const ticks = unit === 1 ? { ...hourTicks(last), ticks: d3.range(12, last + 1, 12) }
+    : { ticks: d3.range(last > 7 ? 2 : 1, last + 1, last > 7 ? 2 : 1), tickFormat: (d) => (d === last ? `${d} days` : d) };
+  return plot({
+    width, height: 420, marginLeft: 22, marginRight: 200,
+    x: { domain: [1 / unit, last], ...ticks },
+    y: { reverse: true, domain: [1, videos.length] },
+    marks: [
+      Plot.text([1, videos.length], { y: (r) => r, frameAnchor: "left", dx: -22, textAnchor: "start",
+        text: (r) => `${r}`, fill: "var(--muted)" }),
+      Plot.lineY(shown, { x, y: "rank", z: "id", curve: "bump-x", stroke: "var(--context)", strokeWidth: 1,
+        ariaLabel: (d) => d.id }),
+      Plot.text(ends, { x, y: "rank", dx: 8, textAnchor: "start", text: (d) => label.get(d.id),
+        fill: "var(--muted)", ariaLabel: (d) => d.id }),
+      Plot.tip(shown.filter((d) => d.rank), Plot.pointer({ x, y: "rank", ...tip,
+        title: (d) => `${label.get(d.id)}\nNo. ${d.rank} at hour ${d.hour}, ${full.format(d.views)} views` })),
+    ],
+  });
+}
+
+function heatmap(width) {
+  const marginLeft = 200;
+  const rows = d3.sort(videos, (v) => v.track);
+  return plot({
+    width, height: rows.length * 16 + 26, marginTop: 0, marginLeft,
+    x: { type: "band", domain: d3.range(1, RACE_HOURS + 1), padding: 0, ticks: [12, 24, 36, 48],
+      tickFormat: (h) => (h === RACE_HOURS ? `${h} hours` : h) },
+    y: { domain: rows.map((v) => v.id), padding: 0 },
+    opacity: { type: "sqrt", domain: [0, d3.max(perHour, (d) => d.views)], legend: true, color: "var(--ink)",
+      label: "Views per hour", tickFormat: short, ticks: 4, width: 240, marginLeft: 0 },
+    marks: [
+      Plot.cell(perHour, { x: "hour", y: "id", fill: "var(--ink)", fillOpacity: "views" }),
+      ...rowLabels(rows, marginLeft),
+      Plot.tip(perHour, Plot.pointer({ x: "hour", y: "id", ...tip,
+        title: (d) => `${label.get(d.id)}\n${full.format(d.views)} views in hour ${d.hour}` })),
+    ],
+  });
+}
+
+function lineSince(width, data, field, unit, curve = "linear") {
+  const end = data.at(-1);
+  const extent = d3.extent(data, (d) => d[field]);
+  const domain = field === "views" ? [0, extent[1]] : extent;
+  const [grid, values] = yAxis(domain, unit);
+  return plot({
+    width, height: 240, marginRight: 48,
+    x: monthTicks,
+    y: { domain },
+    marks: [
+      grid,
+      Plot.lineY(data, { x: "date", y: field, curve, stroke: "var(--accent)", strokeWidth: 2 }),
+      values,
+      Plot.dot([end], { x: "date", y: field, r: 3, fill: "var(--accent)" }),
+      Plot.text([end], { x: "date", y: field, dx: 7, textAnchor: "start", text: (d) => short(d[field]),
+        fill: "var(--ink)", fontWeight: 700 }),
+      Plot.tip(data, Plot.pointerX({ x: "date", y: field, ...tip,
+        title: (d) => `${full.format(d[field])}\n${apDate(d.date)}` })),
+    ],
+  });
+}
+
+function growth(width) {
+  const columns = width < 640 ? 2 : 3;
+  const panel = new Map(standings.map((d, i) => [d.id, i]));
+  const fx = (d) => panel.get(d.id) % columns;
+  const fy = (d) => Math.floor(panel.get(d.id) / columns);
+  const max = standings[0].views;
+  const values = d3.ticks(0, max, 2).filter((v) => v > 0);
+  return plot({
+    width, height: Math.ceil(standings.length / columns) * 116, marginTop: 34, marginRight: 44,
+    fx: { axis: null, padding: 0.2 },
+    fy: { axis: null, padding: 0.55 },
+    x: { axis: null },
+    y: { domain: [0, max] },
+    marks: [
+      Plot.ruleY(values, { stroke: "var(--grid)" }),
+      Plot.ruleY([0], { stroke: "var(--context)" }),
+      Plot.lineY(daily, { x: "date", y: "views", z: "id", fx, fy, stroke: "var(--ink-2)", strokeWidth: 1.5,
+        ariaLabel: (d) => d.id }),
+      Plot.text(values.map((v) => ({ id: standings[0].id, v })), { fx, fy, y: "v", frameAnchor: "left",
+        textAnchor: "start", dy: -6, fill: "var(--muted)", stroke: "var(--page)", strokeWidth: 4, paintOrder: "stroke",
+        text: (d) => `${short(d.v)}${d.v === values.at(-1) ? " views" : ""}` }),
+      Plot.text(standings, { fx, fy, frameAnchor: "top-left", dy: -26, text: (d) => number.get(d.id),
+        fill: "var(--muted)" }),
+      Plot.text(standings, { fx, fy, frameAnchor: "top-left", dy: -26, dx: 22, text: (d) => name.get(d.id),
+        fill: "var(--ink)", ariaLabel: (d) => d.id }),
+      Plot.text(standings, { fx, fy, x: "date", y: "views", dx: 5, textAnchor: "start", text: (d) => short(d.views),
+        fill: "var(--ink)", fontWeight: 700 }),
+      Plot.tip(daily, Plot.pointerX({ x: "date", y: "views", fx, fy, ...tip,
+        title: (d) => `${label.get(d.id)}\n${full.format(d.views)} views on ${apDate(d.date)}` })),
+    ],
+  });
+}
+
+const charts = {
+  "time-to-1m": timeTo1M,
+  "first-48h": first48h,
+  rank,
+  heatmap,
+  "album-views": (w) => lineSince(w, totals, "views", "views"),
+  subscribers: (w) => lineSince(w, subscribed, "subscribers", "subscribers", "step-after"),
+  growth,
+};
+
+// Each mark drawn per track carries the video ID as its aria-label. The hovered track, or else the
+// pinned one, gets .on, and moving its path to the end of the group draws it above the others.
+function highlight() {
+  const id = hovered ?? pinned;
+  for (const el of document.querySelectorAll(".tracks svg [aria-label]")) {
+    const on = el.getAttribute("aria-label") === id;
+    el.classList.toggle("on", on);
+    if (on && el.tagName === "path") el.parentNode.append(el);
+  }
+}
+
+function draw(id) {
+  const figure = document.getElementById(id);
+  const chart = charts[id](figure.clientWidth);
+  if (figure.classList.contains("tracks")) {
+    chart.addEventListener("input", () => {
+      hovered = chart.value?.id ?? null;
+      highlight();
+    });
+    chart.addEventListener("click", () => {
+      if (chart.value) pinned = chart.value.id;
+      highlight();
+    });
+  }
+  figure.querySelector(".chart").replaceChildren(chart);
+}
+
+function render() {
+  for (const id of Object.keys(charts)) draw(id);
+  highlight();
+}
+
+const table = document.createElement("table");
+const head = table.createTHead().insertRow();
+for (const h of ["", "Track", "Views", "Likes", "Comments", "Views, past 7 days"]) {
+  const th = document.createElement("th");
+  th.textContent = h;
+  head.append(th);
+}
+const body = table.createTBody();
+for (const d of standings) {
+  const tr = body.insertRow();
+  for (const cell of [number.get(d.id), name.get(d.id), d.views, d.likes, d.comments, d.gain]) {
+    const td = tr.insertCell();
+    td.textContent = typeof cell === "number" ? full.format(cell) : cell ?? "–";
+  }
+  tr.cells[0].className = "num";
+}
+const details = document.createElement("details");
+const summary = document.createElement("summary");
+summary.textContent = "Views, likes, and comments by track";
+details.append(summary, table);
+document.getElementById("growth").append(details);
+
+for (const button of document.querySelectorAll("#rank-window button")) {
+  button.addEventListener("click", () => {
+    rankHours = +button.dataset.hours;
+    for (const b of document.querySelectorAll("#rank-window button")) b.setAttribute("aria-pressed", b === button);
+    draw("rank");
+    highlight();
+  });
+}
+
+render();
+let resizeTimer;
+addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(render, 150);
+});
+</script>
+</body>
+</html>

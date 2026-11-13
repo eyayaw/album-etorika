@@ -1,5 +1,6 @@
 __pycache__/
 .env
+_site/
 
 # The VPS tracker writes the dashboard data, which holds every snapshot.
 dashboard/data.json

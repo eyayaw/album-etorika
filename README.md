@@ -1,68 +1,36 @@
-# Etorika Album (ኤቶሪካ አልበም)
+# ETORIKA album tracker (ኤቶሪካ አልበም)
 
-A small project to monitor the album's traction in real time.
+YouTube views of the 18 tracks on Teddy Afro's *ኤቶሪካ (ETORIKA)*, released 2026-04-16, and the
+subscriber count of his channel, charted since release day at <https://etorika.datakomari.com>.
 
 <p align="center">
-  <img src="assets/etorika-album-cover.jpg" alt="ETORIKA album cover" width="480">
+  <img src="assets/etorika-album-cover.jpg" alt="ETORIKA album cover" width="360">
 </p>
 
-Teddy Afro's *ኤቶሪካ (Etorika)* album — 18 tracks, released on YouTube on
-**2026-04-16 at 14:00 EAT** (11:00 UTC). This repo watches the official
-channel in real time and turns the release into a live dashboard of how each
-track is doing, minute by minute.
+## How it works
 
-**🔴 Live:** <https://etorika.datakomari.com>
+- `collect.py` runs on GitHub Actions twice a day and appends the statistics of the videos in
+  `videos.csv` and of their channel to monthly CSVs under `data/`.
+- `exports/` holds the snapshots that a tracker on a separate server has taken about every two
+  minutes since release. `scripts/push-exports.sh` pulls new snapshots from that server and commits
+  them.
+- `build_site.py` builds the site in `_site/` from `site/` and both sets of samples. The `pages`
+  workflow publishes it to GitHub Pages after every push to `main` and every successful `collect`
+  run.
 
-## The dashboard
+## Run locally
 
-Auto-refreshed every 30 seconds, showing:
-
-- **KPI strip** — total album views, likes, comments, average like rate,
-  channel subscriber growth, all anchored to release time
-- **Track standings** — horizontal bar chart ranked by views, with a live
-  running total overlaid in the empty corner
-- **Views per track** — one line per song since release, with per-track
-  release markers (tracks didn't all drop at the same moment)
-- **Album momentum** — cumulative total with a smooth curve + release dots
-- **Channel subscribers** — buzz translated into channel growth
-- **Latest snapshot** — precise current numbers, each row clickable to the
-  track on YouTube
-
-Dark mode, mobile-aware, static HTML + `data.json` — no backend at request
-time.
-
-## Under the hood
-
-- **Collection** — a GitHub Actions workflow runs `collect.py` twice a day. It
-  appends statistics for the tracks in `videos.csv` to `data/videos/YYYY-MM.csv` and for
-  their channel to `data/channel/YYYY-MM.csv`.
-- **Tracker** — a process on the VPS polls the YouTube Data API every 2 minutes and
-  stores snapshots in SQLite. A daily cron job runs `scripts/push-exports.sh`, which
-  copies them into `exports/`, one JSONL file per UTC day.
-- **Export** — after every poll, the tracker rewrites `dashboard/data.json`,
-  which the dashboard reads.
-- **Charts** — Observable Plot + d3 in a single static HTML file.
-- **Hosted** on a small Hetzner VPS; nginx serves the static dashboard on
-  an allowlist of exactly three paths.
-
-## Try it locally
-
-`collect.py` uses only stdlib Python. Get a
-[YouTube Data API key](https://console.cloud.google.com/apis/credentials) with
-*YouTube Data API v3* enabled, and run:
+With a [YouTube Data API v3 key](https://console.cloud.google.com/apis/credentials):
 
 ```bash
-export YOUTUBE_API_KEY=your-key
-uv run collect.py
+YOUTUBE_API_KEY=your-key uv run collect.py
+uv run build_site.py
+python3 -m http.server -d _site 8000
+python3 -m unittest discover -s tests
 ```
 
 ## Credits
 
-*ETORIKA* © Teddy Afro. This repository is an observer / tracker — it only
-stores and visualises publicly-reported YouTube statistics. No audio, video,
-lyrics, or artwork (besides the album cover used under fair-use linking) is
-redistributed here.
-
-## License
-
-MIT.
+*ETORIKA* © Teddy Afro. This repository is a tracker. It only stores and visualizes publicly
+reported YouTube statistics. It redistributes no audio, video, or lyrics, and it uses the album
+cover in `assets/` under fair use.

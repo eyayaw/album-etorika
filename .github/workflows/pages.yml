@@ -1,0 +1,41 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+  # A push made with GITHUB_TOKEN starts no workflow, so the push from collect cannot trigger this
+  # one. workflow_run rebuilds the site when collect completes (checked 2026-11-13):
+  # https://docs.github.com/en/actions/concepts/security/github_token#when-github_token-triggers-workflow-runs
+  workflow_run:
+    workflows: [collect]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: build
+        run: python3 build_site.py
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
