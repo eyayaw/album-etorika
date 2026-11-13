@@ -41,6 +41,9 @@ time.
 - **Charts** — Observable Plot + d3 in a single static HTML file.
 - **Hosted** on a small Hetzner VPS; nginx serves the static dashboard on
   an allowlist of exactly three paths.
+- **Collection** — a GitHub Actions workflow runs `collect.py` twice a day. It
+  appends statistics for the tracks in `videos.csv` to `data/videos/YYYY-MM.csv` and for
+  their channel to `data/channel/YYYY-MM.csv`.
 
 ## Try it locally
 

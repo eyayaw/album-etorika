@@ -23,6 +23,8 @@ rsync -az --delete "$VPS:$VPS_DIR/exports/" "$REPO_DIR/exports/"
 if [[ -n "$(git status --porcelain exports/)" ]]; then
   git add exports/
   git commit -q -m "snapshot $(date -u +%FT%H:%MZ)"
+  # The collect workflow pushes to the same branch.
+  git pull -q --rebase --autostash
   git push -q
   echo "Pushed snapshot $(date -u +%FT%H:%MZ)"
 else
