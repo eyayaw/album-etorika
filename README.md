@@ -11,12 +11,10 @@ subscriber count of his channel, charted since release day at <https://etorika.d
 
 - `collect.py` runs on GitHub Actions twice a day and appends the statistics of the videos in
   `videos.csv` and of their channel to monthly CSVs under `data/`.
-- `exports/` holds the snapshots that a tracker on a separate server has taken about every two
-  minutes since release. `scripts/push-exports.sh` pulls new snapshots from that server and commits
-  them.
-- `build_site.py` builds the site in `_site/` from `site/` and both sets of samples. The `pages`
-  workflow publishes it to GitHub Pages after every push to `main` and every successful `collect`
-  run.
+- `data/` also holds the samples that a tracker took about every two minutes from release until
+  2026-11-13, thinned to the ones the site charts.
+- `build_site.py` builds the site in `_site/` from `site/` and `data/`. The `pages` workflow
+  publishes it to GitHub Pages after every push to `main` and every successful `collect` run.
 
 ## Run locally
 

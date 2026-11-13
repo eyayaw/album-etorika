@@ -2,8 +2,7 @@
 # requires-python = ">=3.11"
 # ///
 """
-Build the static site in _site/ from site/, album.json, videos.csv, and the samples in exports/ and
-data/.
+Build the static site in _site/ from site/, album.json, videos.csv, and the samples in data/.
 
 Next to the copied files, the build writes the CSVs that site/index.html charts:
 
@@ -17,7 +16,6 @@ Next to the copied files, the build writes the CSVs that site/index.html charts:
 
 import csv
 import glob
-import json
 import math
 import shutil
 import sys
@@ -30,30 +28,13 @@ RACE_HOURS = 48
 # The longest window of the rank chart in site/index.html.
 RANK_HOURS = 14 * 24
 
-# Maps each output column to its field in the archive's JSONL. The CSVs that collect.py writes
-# already use the output column names.
-VIDEO_FIELDS = {
-    "video_id": "video_id",
-    "views": "view_count",
-    "likes": "like_count",
-    "comments": "comment_count",
-}
-CHANNEL_FIELDS = {"subscribers": "subscriber_count", "views": "view_count", "videos": "video_count"}
 
-
-def samples(
-    archive: str, collected: str, fields: dict[str, str]
-) -> Iterator[tuple[datetime, dict]]:
-    """Yield (time, row) for each sample in archive/*.jsonl, then in collected/*.csv."""
-    for path in sorted(glob.glob(f"{archive}/*.jsonl")):
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                r = json.loads(line)
-                yield datetime.fromisoformat(r["timestamp"]), {k: r[v] for k, v in fields.items()}
-    for path in sorted(glob.glob(f"{collected}/*.csv")):
+def samples(directory: str) -> Iterator[tuple[datetime, dict]]:
+    """Yield (retrieved_at, row) for each row of the CSVs that collect.py writes to directory."""
+    for path in sorted(glob.glob(f"{directory}/*.csv")):
         with open(path, encoding="utf-8") as f:
             for r in csv.DictReader(f):
-                yield datetime.fromisoformat(r["retrieved_at"]), {k: r[k] for k in fields}
+                yield datetime.fromisoformat(r["retrieved_at"]), r
 
 
 def keep_latest(table: dict, key: object, at: datetime, row: dict) -> None:
@@ -77,7 +58,7 @@ def main() -> None:
     race: list[dict] = []
     hourly: dict[tuple[str, int], tuple[datetime, dict]] = {}
     daily: dict[tuple[str, str], tuple[datetime, dict]] = {}
-    for at, row in samples("exports/snapshots", "data/videos", VIDEO_FIELDS):
+    for at, row in samples("data/videos"):
         if row["video_id"] not in published:
             continue
         hours = (at - published[row["video_id"]]).total_seconds() / 3600
@@ -97,7 +78,7 @@ def main() -> None:
 
     release = min(published.values())
     channel: dict[str, tuple[datetime, dict]] = {}
-    for at, row in samples("exports/channel_snapshots", "data/channel", CHANNEL_FIELDS):
+    for at, row in samples("data/channel"):
         within_race = at - release <= timedelta(hours=RACE_HOURS)
         keep_latest(channel, at.isoformat() if within_race else at.date().isoformat(), at, row)
 
@@ -117,10 +98,7 @@ def main() -> None:
     write_csv(
         "channel.csv",
         ["retrieved_at", "subscribers", "views", "videos"],
-        [
-            {"retrieved_at": at.strftime("%Y-%m-%dT%H:%M:%SZ"), **row}
-            for at, row in sorted(channel.values(), key=lambda v: v[0])
-        ],
+        [row for _, row in sorted(channel.values(), key=lambda v: v[0])],
     )
     print(
         f"Built {SITE}/: {len(race)} race, {len(hourly)} hourly, {len(daily)} daily, "

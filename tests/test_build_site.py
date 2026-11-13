@@ -1,5 +1,4 @@
 import csv
-import json
 import os
 import sys
 import tempfile
@@ -8,11 +7,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_site
-
-
-def jsonl(path, rows):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
 
 
 class BuildSiteTest(unittest.TestCase):
@@ -26,36 +20,21 @@ class BuildSiteTest(unittest.TestCase):
         Path("videos.csv").write_text(
             "track,video_id,title,published_at\n1,a,A,2026-04-16T11:00:00Z\n"
         )
-        snap = lambda ts, v: {
-            "video_id": "a",
-            "timestamp": ts,
-            "view_count": v,
-            "like_count": 1,
-            "comment_count": 1,
-        }
-        jsonl(
-            Path("exports/snapshots/2026-04-16.jsonl"),
-            [snap("2026-04-16T12:00:00+00:00", 10), snap("2026-04-16T23:00:00+00:00", 20)],
-        )
-        jsonl(Path("exports/snapshots/2026-04-20.jsonl"), [snap("2026-04-20T12:00:00+00:00", 50)])
-        chan = lambda ts, s: {
-            "channel_id": "UC",
-            "timestamp": ts,
-            "subscriber_count": s,
-            "view_count": 1,
-            "video_count": 1,
-        }
-        jsonl(
-            Path("exports/channel_snapshots/2026-04-16.jsonl"),
-            [chan("2026-04-16T12:00:00+00:00", 100), chan("2026-04-16T23:00:00+00:00", 200)],
-        )
-        jsonl(
-            Path("exports/channel_snapshots/2026-04-20.jsonl"),
-            [chan("2026-04-20T01:00:00+00:00", 300), chan("2026-04-20T02:00:00+00:00", 400)],
-        )
         Path("data/videos").mkdir(parents=True)
         Path("data/videos/2026-04.csv").write_text(
-            "retrieved_at,video_id,views,likes,comments\n2026-04-20T23:00:00Z,a,60,,\n"
+            "retrieved_at,video_id,views,likes,comments\n"
+            "2026-04-16T12:00:00Z,a,10,1,1\n"
+            "2026-04-16T23:00:00Z,a,20,1,1\n"
+            "2026-04-20T12:00:00Z,a,50,1,1\n"
+            "2026-04-20T23:00:00Z,a,60,,\n"
+        )
+        Path("data/channel").mkdir(parents=True)
+        Path("data/channel/2026-04.csv").write_text(
+            "retrieved_at,channel_id,subscribers,views,videos\n"
+            "2026-04-16T12:00:00Z,UC,100,1,1\n"
+            "2026-04-16T23:00:00Z,UC,200,1,1\n"
+            "2026-04-20T01:00:00Z,UC,300,1,1\n"
+            "2026-04-20T02:00:00Z,UC,400,1,1\n"
         )
 
     def tearDown(self):
