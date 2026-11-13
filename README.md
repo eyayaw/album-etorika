@@ -33,54 +33,28 @@ time.
 
 ## Under the hood
 
-- **Tracker** — polls the YouTube Data API every 2 minutes, auto-discovers
-  new uploads on the channel since release time, and stores per-track +
-  channel-level snapshots in SQLite (WAL mode).
+- **Collection** — a GitHub Actions workflow runs `collect.py` twice a day. It
+  appends statistics for the tracks in `videos.csv` to `data/videos/YYYY-MM.csv` and for
+  their channel to `data/channel/YYYY-MM.csv`.
+- **Tracker** — a process on the VPS polls the YouTube Data API every 2 minutes and
+  stores snapshots in SQLite. A daily cron job runs `scripts/push-exports.sh`, which
+  copies them into `exports/`, one JSONL file per UTC day.
 - **Export** — after every poll, the tracker rewrites `dashboard/data.json`,
   which the dashboard reads.
 - **Charts** — Observable Plot + d3 in a single static HTML file.
 - **Hosted** on a small Hetzner VPS; nginx serves the static dashboard on
   an allowlist of exactly three paths.
-- **Collection** — a GitHub Actions workflow runs `collect.py` twice a day. It
-  appends statistics for the tracks in `videos.csv` to `data/videos/YYYY-MM.csv` and for
-  their channel to `data/channel/YYYY-MM.csv`.
 
 ## Try it locally
 
-### Prerequisites
-
-- Python ≥ 3.11
-- [`uv`](https://docs.astral.sh/uv/) for dependency management
-- A YouTube Data API key — create one at
-  [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
-  and enable *YouTube Data API v3*
-
-### Run
+`collect.py` uses only stdlib Python. Get a
+[YouTube Data API key](https://console.cloud.google.com/apis/credentials) with
+*YouTube Data API v3* enabled, and run:
 
 ```bash
-uv sync                                    # install deps
-echo "YOUTUBE_API_KEY=your-key" > .env
-uv run python main.py run                  # start the tracker
-uv run python main.py dashboard            # → http://localhost:8000
+export YOUTUBE_API_KEY=your-key
+uv run collect.py
 ```
-
-<details>
-<summary>Other commands</summary>
-
-| Command | What it does |
-| --- | --- |
-| `run` | Auto-discover new uploads + snapshot everything in a loop |
-| `snapshot` | Take a single snapshot of all tracked videos |
-| `add VIDEO_ID …` | Manually track specific videos |
-| `add-playlist PLAYLIST_ID` | Track all videos in a playlist |
-| `stats` | Print the latest snapshot as a table |
-| `history VIDEO_ID` | Show snapshot deltas for one track |
-| `dashboard` | Serve the web dashboard (default port 8000) |
-
-Useful flags: `-i 60` to poll every 60s, `-p 8080` for a different
-dashboard port.
-
-</details>
 
 ## Credits
 

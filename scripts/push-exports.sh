@@ -13,7 +13,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$REPO_DIR"
 
-# 1. Run incremental export on the VPS
+# 1. Run incremental export on the VPS, from the tracker code deployed there
 ssh "$VPS" "cd $VPS_DIR && ~/.local/bin/uv run python main.py export"
 
 # 2. Mirror exports/ back to local (VPS is source of truth)
