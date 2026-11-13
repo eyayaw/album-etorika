@@ -22,7 +22,7 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 collect.py
 
-      # scripts/push-exports.sh pushes to the same branch, so the push rebases first.
+      # Another push can land on main while the job runs, so the push rebases first.
       - name: commit and push
         run: |
           git config user.name "GitHub Action"

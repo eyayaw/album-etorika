@@ -1,6 +1,3 @@
 __pycache__/
 .env
 _site/
-
-# Written by the cron job that runs scripts/push-exports.sh.
-scripts/*.log
