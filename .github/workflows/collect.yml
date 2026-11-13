@@ -2,8 +2,8 @@ name: collect
 
 on:
   schedule:
-    # GitHub delays scheduled runs under high load, which includes the start of every hour, and
-    # may drop them (checked 2026-11-13):
+    # The runs start at minute 17 because GitHub delays scheduled runs under high load, which
+    # includes the start of every hour, and may drop them (checked 2026-11-13):
     # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
     - cron: '17 11,23 * * *'
   workflow_dispatch:

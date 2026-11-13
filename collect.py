@@ -2,11 +2,12 @@
 # requires-python = ">=3.11"
 # ///
 """
-Append the current YouTube statistics for the videos in videos.csv and for their channel.
+Record the current YouTube statistics of the videos in videos.csv and of their channel.
 
 Each run appends one row per returned video to data/videos/YYYY-MM.csv and one row per channel to
-data/channel/YYYY-MM.csv, for the current UTC month. Listed videos that return no data are printed
-to stderr.
+data/channel/YYYY-MM.csv, for the current UTC month. The run prints the IDs of listed videos that
+the API returns no data for to stderr, and exits with an error when YOUTUBE_API_KEY is unset or a
+request fails with an HTTP error.
 """
 
 import csv
@@ -61,7 +62,7 @@ def main() -> None:
 
     missing = sorted(set(ids) - {v["id"] for v in videos})
     if missing:
-        print(f"Listed videos with no data: {', '.join(missing)}", file=sys.stderr)
+        print(f"No data for these videos in videos.csv: {', '.join(missing)}", file=sys.stderr)
 
     # An absent count stays empty, because 0 would read as a measured count.
     video_rows = [
